@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development # Enable development mode
+      - DATABASE_URL=file:/app/db.sqlite
+      - ENCRYPTION_KEY=1df203da9f8f79d07f609705e7d0ccbbe4b7e9f47fba613a68171a62925d97a2
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - .:/app:delegated # Sync local files with the container
+      - /app/node_modules # Prevent overwriting node_modules
+    command: ["npm", "run", "dev"] # Run Next.js in development mode
+    depends_on:
+      - redis
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx.Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--loglevel", "notice"]
+
+  redis-commander:
+    image: ghcr.io/joeferner/redis-commander:latest
+    container_name: redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+
+  prisma-studio:
+    image: node:18-alpine
+    working_dir: /app
+    command: [ "npx", "prisma", "studio" ]
+    volumes:
+      - .:/app
+    ports:
+      - "5555:5555"
+    environment:
+      - DATABASE_URL=file:/app/db.sqlite
